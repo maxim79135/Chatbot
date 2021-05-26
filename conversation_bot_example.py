@@ -34,6 +34,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 CHOOSING, TYPING_REPLY, TYPING_CHOICE = range(3)
+CHOICE_GROUP = 4
 
 reply_keyboard = [
     ['Age', 'Favourite colour'],
@@ -42,6 +43,13 @@ reply_keyboard = [
 ]
 markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
 
+group_list = [
+    'gr1',
+    'gr2',
+    'gr3',
+    'gr4',
+    'gr5'
+]
 
 def facts_to_str(user_data: Dict[str, str]) -> str:
     facts = list()
@@ -108,6 +116,24 @@ def done(update: Update, context: CallbackContext) -> int:
     user_data.clear()
     return ConversationHandler.END
 
+def choice_group(update: Update, _: CallbackContext) -> int:
+    update.message.reply_text(
+        "now you try to choice group",
+        reply_markup=ReplyKeyboardMarkup([group_list], one_time_keyboard=True),
+    )
+
+    return CHOICE_GROUP
+
+def user_group_choice(update: Update, context: CallbackContext) -> int:
+    text = update.message.text
+    context.user_data['choice'] = text
+    update.message.reply_text(f'Your type {text.lower()}')
+    if text == 'gg':
+        update.message.reply_text('end conversation')
+        return ConversationHandler.END
+    else:
+        return CHOICE_GROUP
+
 
 def main() -> None:
     # Create the Updater and pass it your bot's token.
@@ -143,6 +169,30 @@ def main() -> None:
 
     dispatcher.add_handler(conv_handler)
 
+    choice_group_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('choice_group', choice_group)],
+        states={
+            CHOICE_GROUP: [
+                #  MessageHandler(
+                    #  Filters.regex('^(Age|Favourite colour|Number of siblings)$'), regular_choice
+                #  ),
+                MessageHandler(Filters.text, user_group_choice),
+            ],
+            TYPING_CHOICE: [
+                MessageHandler(
+                    Filters.text & ~(Filters.command | Filters.regex('^Done$')), regular_choice
+                )
+            ],
+            TYPING_REPLY: [
+                MessageHandler(
+                    Filters.text & ~(Filters.command | Filters.regex('^Done$')),
+                    received_information,
+                )
+            ],
+        },
+        fallbacks=[MessageHandler(Filters.regex('^Done$'), done)],
+    )
+    dispatcher.add_handler(choice_group_conv_handler)
     # Start the Bot
     updater.start_polling()
 
