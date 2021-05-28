@@ -3,8 +3,10 @@
 
 """Schedule telegram bot"""
 
+import sqlite3
 import logging
 from abc import ABC
+from choice_group_bot import ChoiceGroupConversation
 
 from telegram import Update
 from telegram.ext import (CallbackContext, CommandHandler, ConversationHandler,
@@ -17,6 +19,30 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# SETTINGS SECTION
+TOKEN = '1147885266:AAFNCRzr3aDZacN5CQ55EHNx7pK35RKdejw'
+DB_NAME = 'bot.db'
+
+# func has same names: /start -> bot_start()
+available_bot_commands = [
+    '/start',
+    '/sch',
+    '/sch_tomorrow',
+    '/sch_teacher',
+    #  '/sch_auto',
+    '/feedback',
+    '/choice_group',
+]
+
+REPLY, CHOICE_GROUP, GIVE_FEEDBACK = map(chr, range(3))
+# State definitions for second level conversation
+#  SELECTING_LEVEL, SELECTING_GENDER = map(chr, range(4, 6))
+# State definitions for descriptions conversation
+#  SELECTING_FEATURE, TYPING = map(chr, range(6, 8))
+# Meta states
+#  STOPPING, SHOWING = map(chr, range(8, 10))
+# Shortcut for ConversationHandler.END
+END = ConversationHandler.END
 
 group_list = [
     'gr1',
@@ -27,91 +53,61 @@ group_list = [
 ]
 
 
-class CommonConversation(ABC):
-    """Common comversation class"""
+def bot_start(update: Update, context: CallbackContext):
+    if False:
+    #  if user exist:
+        update.message.reply_text('Я тебя помню, если хочешь изменить свою группу скажи прямо.')
+    else:
+        update.message.reply_text('Привет, я чат-бот ВятГУ. Умею показывать расписание, отвечать на часто задаваемые вопросы, а также сохранять обратную связь.\nНапиши свой вопрос или воспользуйся кнопками на клавиатуре')
+    return END
 
-    no_patterns = [
-        'нет',
-        'ytn',
-        'yt',
-        'неа',
-        'не',
-        #  'не{0,30}',  TODO: add regex
-        'н',
-        'не хочу',
-        'no',
-        'nope',
-    ]
 
-    yes_patterns = [
-        'д',
-        'да',
-        'lf',
-        #  'да{0,30}', TODO: add regex
-        'ага',
-        'угу',
-        'хочу',
-        'yes',
-        'yeap',
-        'yeap',
-    ]
+def make_desicion(update: Update, context: CallbackContext):
+    message = update.message.text
+    #  print(dir(update.message))
+    print((update.message.from_user.id))
+    if message in ['gr', 'гр']:
+        update.message.reply_text('Скажи свою группу')
+        return CHOICE_GROUP
+    update.message.reply_text(update.message.text)
+    return END
+        # call choice_group conversation
 
-class ChoiceGroupConversation(CommonConversation):
-    """Contain choice group conversation functions"""
+    #  if message in available_bot_commands:
+        #  return locals()['bot_'+message[1:]](update, context)
+    # else:
+    #     is_faq, faq_answer = faq_or_feedback(message) # True - faq; False - feedback
+    #     if is_faq:
+    #         if faq_answer in available_bot_commands:
+    #             return locals()['bot_'+faq_answer[1:]](update, context)
+    #         else:
+    #             response = insert_data(faq_answer)
+    #             update.message.reply_text(insert_data(faq_answer))
+    #             return END
 
-    CHOICE_GROUP, CONFIRM_GROUP, TRY_AGAIN = range(3)
-    #  def __init__(self):
-    #  self.CHOICE_GROUP, self.CONFIRM_GROUP, self.TRY_AGAIN = range(3)
 
-    def try_again(self, update: Update, _: CallbackContext) -> int:
-        answer = update.message.text
-        if answer in self.yes_patterns:
-            #  update.message.reply_text('')
-            return self.CHOICE_GROUP
-        update.message.reply_text('Окей, давай в другой раз')
-        return ConversationHandler.END
+def save_feedback(update: Update, _: CallbackContext):
+    print(update.message.text)
+    return END
 
-    def confirm_group(self, update: Update, context: CallbackContext) -> int:
-        answer = update.message.text
-        if answer in self.yes_patterns:
-            update.message.reply_text('Понял, принял')
-            # save user group
-            print(context.user_data['choice'])
-            return ConversationHandler.END
-        if answer in self.no_patterns:
-            update.message.reply_text('Значит мы немного не поняли друг друга\nПопробуешь еще раз?')
-            return self.TRY_AGAIN
+def reply(update: Update, _: CallbackContext):
+    update.message.reply_text(update.message.text)
+    return END
 
-        update.message.reply_text('А можно по конкретнее: да или нет?')
-        return self.CONFIRM_GROUP
-
-    def choice_group(self, update: Update, context: CallbackContext) -> int:
-        text = update.message.text
-        context.user_data['choice'] = text
-        #  context.user_data['attempt_num'] =
-        if text in group_list:  # TODO: add group_list
-            update.message.reply_text(f'Твоя группа {text}?')
-            return self.CONFIRM_GROUP
-        update.message.reply_text('Похоже такой группы нет, попробуй еще раз')
-        return self.CHOICE_GROUP
-
-    def choice_group_entry(self, update: Update, _: CallbackContext) -> int:
-        update.message.reply_text('Какая у тебя группа?')
-        return self.CHOICE_GROUP
-
-    def fallback(self, update: Update, context: CallbackContext) -> int:
-        update.message.reply_text('done')
-        context.user_data.clear()
-        return ConversationHandler.END
+def stop(update: Update, _: CallbackContext):
+    update.message.reply_text('Stopped')
+    return END
 
 def main() -> None:
-    updater = Updater("1147885266:AAFNCRzr3aDZacN5CQ55EHNx7pK35RKdejw")
+    conn = sqlite3.connect(DB_NAME)
+
+    updater = Updater(TOKEN)
 
     dispatcher = updater.dispatcher
 
     cgc = ChoiceGroupConversation()
     choice_group_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('choice_group', cgc.choice_group_entry)],
+        entry_points=[MessageHandler(Filters.text, cgc.choice_group)],
         states={
             cgc.CHOICE_GROUP: [
                 MessageHandler(Filters.text, cgc.choice_group),
@@ -128,8 +124,31 @@ def main() -> None:
             ],
         },
         fallbacks=[MessageHandler(Filters.regex('^Done$'), cgc.fallback)],
+        map_to_parent={
+            END: END,
+        }
     )
-    dispatcher.add_handler(choice_group_conv_handler)
+
+    conv_handler = ConversationHandler(
+        entry_points=[MessageHandler(Filters.text, make_desicion)],
+        states={
+            #  FAQ: [CallbackQueryHandler(start, pattern='^' + str(END) + '$')],
+            REPLY: [MessageHandler(Filters.text, reply)],
+            CHOICE_GROUP: [choice_group_conv_handler],  # TODO: add map_parent
+            GIVE_FEEDBACK: [MessageHandler(Filters.text, save_feedback)],
+            #  GET_TODAY_SCHEDULE: selection_handlers,
+            #  GET_TOMORROW_SCHEDULE: selection_handlers,
+            #  GET_LINK_SCHEDULE: selection_handlers,
+            #  GET_TEACHER_SCHEDULE: [get_teacher_schedule_conv_handler],
+            #  GET_LINK_TEACHER_SCHEDULE: [get_link_teacher_schedule_conv_handler],
+            #  STOPPING: [CommandHandler('start', start)],
+        },
+        fallbacks=[MessageHandler(Filters.text, stop)],
+        #  fallbacks=[CommandHandler('stop', stop)],
+    )
+
+    dispatcher.add_handler(conv_handler)
+    #  dispatcher.add_handler(MessageHandler(Filters.text, reply))
 
     updater.start_polling()
     updater.idle()
