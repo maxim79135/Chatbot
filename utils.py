@@ -28,37 +28,58 @@ class DBManager:
     def user_exist(self, tg_id: int) -> bool:
         self.conn = sqlite3.connect(self.db_name)
         self.cursor = self.conn.cursor()
-        self.cursor.execute('SELECT * FROM users WHERE tg_id=(?)', (tg_id,))
-        res = bool(self.cursor.fetchone())
-        self.conn.close()
+        try:
+            self.cursor.execute('SELECT * FROM users WHERE tg_id=(?)', (tg_id,))
+            res = bool(self.cursor.fetchone())
+        except sqlite3.OperationalError as op_error:
+            print(dir(op_error))
+            raise SystemError(f'Database Error: {op_error}') from op_error
+        finally:
+            self.conn.close()
         return res
 
     def insert_user(self, tg_id: int, st_group: Optional[str] = None) -> None:
         self.conn = sqlite3.connect(self.db_name)
         self.cursor = self.conn.cursor()
-        self.cursor.execute('INSERT OR IGNORE INTO users (tg_id, stud_group) values (?, ?)', (tg_id, st_group,))
-        self.conn.commit()
-        self.conn.close()
+        try:
+            self.cursor.execute('INSERT OR IGNORE INTO users (tg_id, stud_group) values (?, ?)', (tg_id, st_group,))
+            self.conn.commit()
+        except sqlite3.OperationalError as op_error:
+            raise SystemError(f'Database Error: {op_error}') from op_error
+        finally:
+            self.conn.close()
 
     def update_user(self, tg_id: int, st_group: Optional[str] = None) -> None:
         self.conn = sqlite3.connect(self.db_name)
         self.cursor = self.conn.cursor()
-        self.cursor.execute('UPDATE OR IGNORE INTO users (tg_id, stud_group) VALUES (?, ?)', (tg_id, st_group,))
-        self.conn.commit()
-        self.conn.close()
+        try:
+            self.cursor.execute('UPDATE OR IGNORE INTO users (tg_id, stud_group) VALUES (?, ?)', (tg_id, st_group,))
+            self.conn.commit()
+        except sqlite3.OperationalError as op_error:
+            raise SystemError(f'Database Error: {op_error}') from op_error
+        finally:
+            self.conn.close()
 
     def save_feedback(self, tg_id: int, feedback: str, sent: str) -> None:
         self.conn = sqlite3.connect(self.db_name)
         self.cursor = self.conn.cursor()
-        self.cursor.execute('INSERT INTO feedbacks (user_id, feedback, sent) VALUES (?, ?, ?)',
-                            (tg_id, feedback, sent))
-        self.conn.commit()
-        self.conn.close()
+        try:
+            self.cursor.execute('INSERT INTO feedbacks (user_id, feedback, sent) VALUES (?, ?, ?)',
+                                (tg_id, feedback, sent))
+            self.conn.commit()
+        except sqlite3.OperationalError as op_error:
+            raise SystemError(f'Database Error: {op_error}') from op_error
+        finally:
+            self.conn.close()
 
     def get_user_feedbacks(self, tg_id: int) -> List[Any]:
         self.conn = sqlite3.connect(self.db_name)
         self.cursor = self.conn.cursor()
-        self.cursor.execute('SELECT * from feedbacks WHERE user_id=(?)', (tg_id,))
-        res = self.cursor.fetchall()
-        self.conn.close()
+        try:
+            self.cursor.execute('SELECT * from feedbacks WHERE user_id=(?)', (tg_id,))
+            res = self.cursor.fetchall()
+        except sqlite3.OperationalError as op_error:
+            raise SystemError(f'Database Error: {op_error}') from op_error
+        finally:
+            self.conn.close()
         return res
