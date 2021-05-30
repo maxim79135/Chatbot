@@ -64,7 +64,7 @@ class TeacherScheduleConversation(CommonConversation):
     """Contain teacher schedule conversation functions"""
 
     # States
-    ST_CHOICE_TEACHER, ST_CONFIRM_TEACHER, ST_CHOICE_DATE, ST_INPUT_DATE, ST_TRY_AGAIN = map(chr, range(5))
+    ST_CHOICE_TEACHER, ST_CONFIRM_TEACHER, ST_CHOICE_DATE, ST_INPUT_DATE, ST_TRY_AGAIN, ST_CHOICE_TEACHER_FROM_LIST = map(chr, range(6))
     ST_END = ConversationHandler.END
 
     # Callback patterns
@@ -77,7 +77,7 @@ class TeacherScheduleConversation(CommonConversation):
         CP_DATE_CHOICE,
         CP_TRY_AGAIN_YES,
         CP_TRY_AGAIN_NO,
-    ) = map(chr, range(5, 13))
+    ) = map(chr, range(6, 14))
 
     def choice_teacher(self, update: Update, context: CallbackContext) -> int:
         full_name = update.message.text
@@ -109,23 +109,19 @@ class TeacherScheduleConversation(CommonConversation):
             update.message.reply_text(f'{teacher_list[0]["name"]}\n{teacher_list[0]["dep"]}\nПравильно?',
                                       reply_markup=keyboard)
             return self.ST_CONFIRM_TEACHER
-            #  return self.END
-        #  else:
-        return self.fallback(update, context)  # TODO: add teacher choice
-    '''
+        else:
             context.user_data['teacher_list'] = teacher_list
             update.message.reply_text('Я нашел несколько совпадений. Выбери ')
             buttons = []
             tl_text = ''
             for index, teacher in enumerate(teacher_list):
                 tl_text += f'{index}: {teacher["name"]}, {teacher["dep"]}\n'
-                buttons.append([InlineKeyboardButton(text=str(index), callback_data=str(self.CHOICE_TEACHER_FROM_LIST))])
-                #  buttons.append(InlineKeyboardButton(text=str(index), callback_data=str(NAME)),
+                buttons.append([InlineKeyboardButton(text=str(index), callback_data=str(index))])
             keyboard = InlineKeyboardMarkup(buttons)
 
-            update.callback_query.answer()
-            update.callback_query.edit_message_text(text=tl_text, reply_markup=keyboard)
-    '''
+            #  update.callback_query.answer()
+            update.message.reply_text(text=tl_text, reply_markup=keyboard)
+            return self.ST_CHOICE_TEACHER_FROM_LIST
 
     def choice_date(self, update: Update, _: CallbackContext) -> int:
         buttons = [
@@ -151,7 +147,6 @@ class TeacherScheduleConversation(CommonConversation):
 
     def send_sch(self, update: Update, context: CallbackContext) -> int:
         try:
-            logger.info(f'Update type in send_sch: {type(update)}')
             sch = tsp.get_schedule(context.user_data['teacher'], context.user_data['date'])
             if update.callback_query:
                 send_message = update.callback_query.edit_message_text
@@ -184,7 +179,6 @@ class TeacherScheduleConversation(CommonConversation):
             date = datetime.strptime(update.message.text, '%d.%m.%y')
             logger.info(f'recive date {date.strftime("%d.%m.%y")}')
             context.user_data['date'] = date
-            logger.info(f'Update type in input_date: {type(update)}')
             return self.send_sch(update, context)
         except ValueError:
             update.message.reply_text('Не понимаю тебя, попробуй еще раз. Напоминаю формат даты ДД.ММ.ГГ (например 30.09.21), или напиши /cancel для отмены.')
@@ -209,6 +203,14 @@ class TeacherScheduleConversation(CommonConversation):
     def sch_teacher_entry(self, update: Update, _: CallbackContext) -> int:
         update.message.reply_text('Напиши ФИО преподавателя в порядке Фамилия Имя Отчество')
         return self.ST_CHOICE_TEACHER
+
+    def choice_teacher_from_list(self, update: Update, context: CallbackContext) -> int:
+        teacher_index = int(update.callback_query.data)
+        logger.info(f'teacher index: {teacher_index}')
+
+        context.user_data['teacher'] = context.user_data['teacher_list'][teacher_index]
+
+        return self.choice_date(update, context)
 
     def cancel(self, update: Update, context: CallbackContext) -> int:
         update.callback_query.edit_message_text('Отменено')
@@ -249,6 +251,9 @@ choice_group_conv_handler = ConversationHandler(
         tsc.ST_TRY_AGAIN: [
             CallbackQueryHandler(tsc.try_again, pattern='^' + str(tsc.CP_TRY_AGAIN_YES) + '$'),
             CallbackQueryHandler(tsc.cancel, pattern='^' + str(tsc.CP_TRY_AGAIN_NO) + '$'),
+        ],
+        tsc.ST_CHOICE_TEACHER_FROM_LIST: [
+            CallbackQueryHandler(tsc.choice_teacher_from_list)
         ],
     },
     fallbacks=[MessageHandler(Filters.regex('^Done$'), tsc.fallback)],
