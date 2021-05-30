@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Schedule telegram bot"""
+"""choice group bot"""
 
 import logging
 from abc import ABC
@@ -12,6 +12,7 @@ from telegram.ext import (CallbackContext, CommandHandler, ConversationHandler,
 
 # Enable logging
 logging.basicConfig(
+    #  filename='bot.log', filemode='w',
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
 
