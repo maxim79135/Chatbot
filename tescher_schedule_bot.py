@@ -31,7 +31,7 @@ group_list = [
 ]
 
 
-class CommonConversation(ABC):
+class CommonConversation(ABC):  # pylint: disable=[too-few-public-methods]
     """Common comversation class"""
 
     no_patterns = [
@@ -64,7 +64,15 @@ class TeacherScheduleConversation(CommonConversation):
     """Contain teacher schedule conversation functions"""
 
     # States
-    ST_CHOICE_TEACHER, ST_CONFIRM_TEACHER, ST_CHOICE_DATE, ST_INPUT_DATE, ST_TRY_AGAIN, ST_CHOICE_TEACHER_FROM_LIST = map(chr, range(6))
+    (
+        ST_CHOICE_TEACHER,
+        ST_CONFIRM_TEACHER,
+        ST_CHOICE_DATE,
+        ST_INPUT_DATE,
+        ST_TRY_AGAIN,
+        ST_CHOICE_TEACHER_FROM_LIST
+    ) = map(chr, range(6))
+
     ST_END = ConversationHandler.END
 
     # Callback patterns
@@ -83,20 +91,17 @@ class TeacherScheduleConversation(CommonConversation):
         full_name = update.message.text
         teacher_list = tsp.find_teacher(full_name)
         if len(teacher_list) == 0:
-            #  buttons = [
-                #  [
-                    #  InlineKeyboardButton(text='Да', callback_data=str(self.TRY_AGAIN_YES)),
-                    #  InlineKeyboardButton(text='Нет', callback_data=str(self.TRY_AGAIN_NO))
-                #  ]
-            #  ]
-            #  keyboard = InlineKeyboardMarkup(buttons)
-            #  update.message.reply_text(f'Не могу никого найти с ФИО: {full_name}, попробуешь еще раз?',
-                                      #  reply_markup=keyboard)
-            #  return self.TRY_AGAIN
-
-            update.message.reply_text(f'Не могу никого найти с ФИО: {full_name}, попробуй еще раз')
-            return self.ST_END
-        elif len(teacher_list) == 1:
+            buttons = [
+                [
+                    InlineKeyboardButton(text='Да', callback_data=str(self.CP_TRY_AGAIN_YES)),
+                    InlineKeyboardButton(text='Нет', callback_data=str(self.CP_TRY_AGAIN_NO)),
+                ]
+            ]
+            keyboard = InlineKeyboardMarkup(buttons)
+            update.message.reply_text(f'Не могу никого найти с ФИО: {full_name}\nПовторить попытку?',
+                                      reply_markup=keyboard)
+            return self.ST_TRY_AGAIN
+        if len(teacher_list) == 1:
             context.user_data['teacher'] = teacher_list[0]
             buttons = [
                 [
@@ -109,19 +114,19 @@ class TeacherScheduleConversation(CommonConversation):
             update.message.reply_text(f'{teacher_list[0]["name"]}\n{teacher_list[0]["dep"]}\nПравильно?',
                                       reply_markup=keyboard)
             return self.ST_CONFIRM_TEACHER
-        else:
-            context.user_data['teacher_list'] = teacher_list
-            update.message.reply_text('Я нашел несколько совпадений. Выбери ')
-            buttons = []
-            tl_text = ''
-            for index, teacher in enumerate(teacher_list):
-                tl_text += f'{index}: {teacher["name"]}, {teacher["dep"]}\n'
-                buttons.append([InlineKeyboardButton(text=str(index), callback_data=str(index))])
-            keyboard = InlineKeyboardMarkup(buttons)
 
-            #  update.callback_query.answer()
-            update.message.reply_text(text=tl_text, reply_markup=keyboard)
-            return self.ST_CHOICE_TEACHER_FROM_LIST
+        context.user_data['teacher_list'] = teacher_list
+        update.message.reply_text('Я нашел несколько совпадений. Выбери ')
+        buttons = []
+        tl_text = ''
+        for index, teacher in enumerate(teacher_list):
+            tl_text += f'{index}: {teacher["name"]}, {teacher["dep"]}\n'
+            buttons.append([InlineKeyboardButton(text=str(index), callback_data=str(index))])
+        keyboard = InlineKeyboardMarkup(buttons)
+
+        #  update.callback_query.answer()
+        update.message.reply_text(text=tl_text, reply_markup=keyboard)
+        return self.ST_CHOICE_TEACHER_FROM_LIST
 
     def choice_date(self, update: Update, _: CallbackContext) -> int:
         buttons = [
@@ -132,9 +137,8 @@ class TeacherScheduleConversation(CommonConversation):
             ]
         ]
         keyboard = InlineKeyboardMarkup(buttons)
-        #  update.message.reply_text('На какой день расписание интересует?',
         update.callback_query.edit_message_text(text='На какой день расписание интересует?',
-                                  reply_markup=keyboard)
+                                                reply_markup=keyboard)
         return self.ST_CHOICE_DATE
 
     def send_sch_today(self, update: Update, context: CallbackContext) -> int:
@@ -156,20 +160,17 @@ class TeacherScheduleConversation(CommonConversation):
             if sch:
                 #  update.callback_query.answer()
                 send_message('\n'.join(sch))
-                #  update.message.reply_text('\n'.join(sch))
-                #  update.callback_query.edit_message_text('\n'.join(sch))
             else:
                 #  update.callback_query.answer()
-                send_message(f'{context.user_data["date"].strftime("%d.%m.%y")} у {context.user_data["teacher"]["name"]} нет занятий')
-                #  update.callback_query.edit_message_text(f'{context.user_data["date"].strftime("%d.%m.%y")} у {context.user_data["teacher"]["name"]} нет занятий')
-                #  update.message.reply_text(f'{context.user_data["date"].strftime("%d.%m.%y")} у {context.user_data["teacher"]["name"]} нет занятий')
+                send_message(f'{context.user_data["date"].strftime("%d.%m.%y")} у\
+                             {context.user_data["teacher"]["name"]} нет занятий')
         except ValueError:
             send_message('Похоже на сайте ВятГУ не нашлось расписания для данного преподавателя')
-            #  update.callback_query.edit_message_text('Похоже на сайте ВятГУ не нашлось расписания для данного преподавателя')
         return self.ST_END
 
     def input_date_entry(self, update: Update, _: CallbackContext) -> int:
-        update.callback_query.edit_message_text('Напиши дату в формате ДД.ММ.ГГ (например 23.03.21), или напиши /cancel для отмены.')
+        update.callback_query.edit_message_text('Напиши дату в формате ДД.ММ.ГГ (например 23.03.21),\
+                                                или напиши /cancel для отмены.')
         return self.ST_INPUT_DATE
 
     def input_date(self, update: Update, context: CallbackContext) -> int:
@@ -177,11 +178,12 @@ class TeacherScheduleConversation(CommonConversation):
             return self.fallback(update, context)
         try:
             date = datetime.strptime(update.message.text, '%d.%m.%y')
-            logger.info(f'recive date {date.strftime("%d.%m.%y")}')
+            logger.info('recive date %s', date.strftime("%d.%m.%y"))
             context.user_data['date'] = date
             return self.send_sch(update, context)
         except ValueError:
-            update.message.reply_text('Не понимаю тебя, попробуй еще раз. Напоминаю формат даты ДД.ММ.ГГ (например 30.09.21), или напиши /cancel для отмены.')
+            update.message.reply_text('Не понимаю тебя, попробуй еще раз. Напоминаю формат даты ДД.ММ.ГГ\
+                                      (например 30.09.21), или напиши /cancel для отмены.')
             return self.ST_INPUT_DATE
 
     def try_again_entry(self, update: Update, _: CallbackContext) -> int:
@@ -206,7 +208,7 @@ class TeacherScheduleConversation(CommonConversation):
 
     def choice_teacher_from_list(self, update: Update, context: CallbackContext) -> int:
         teacher_index = int(update.callback_query.data)
-        logger.info(f'teacher index: {teacher_index}')
+        logger.info('teacher index: %s', teacher_index)
 
         context.user_data['teacher'] = context.user_data['teacher_list'][teacher_index]
 
