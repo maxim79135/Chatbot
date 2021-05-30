@@ -48,9 +48,12 @@ conn.commit()
 cursor.execute('SELECT * FROM users WHERE tg_id=(?)', (tg_id,))
 print(cursor.fetchall())
 
-cursor.execute('INSERT OR IGNORE INTO users (tg_id, stud_group) values (?, ?)', (tg_id, st_group,))
+#  cursor.execute('INSERT OR IGNORE INTO users (tg_id, stud_group) values (?, ?)', (tg_id, st_group,))
+st_group = 'ssssssssss'
+cursor.execute('INSERT INTO users (tg_id, stud_group) VALUES (?, ?) ON \
+               CONFLICT (tg_id) DO UPDATE SET stud_group=(?)', (tg_id, st_group, st_group,))
 
-cursor.execute('SELECT * FROM users WHERE tg_id=(?)', (232,))
+cursor.execute('SELECT * FROM users WHERE tg_id=(?)', (tg_id,))
 
-conn.close()
 print(cursor.fetchall())
+conn.close()

@@ -32,7 +32,6 @@ class DBManager:
             self.cursor.execute('SELECT * FROM users WHERE tg_id=(?)', (tg_id,))
             res = bool(self.cursor.fetchone())
         except sqlite3.OperationalError as op_error:
-            print(dir(op_error))
             raise SystemError(f'Database Error: {op_error}') from op_error
         finally:
             self.conn.close()
@@ -53,7 +52,7 @@ class DBManager:
         self.conn = sqlite3.connect(self.db_name)
         self.cursor = self.conn.cursor()
         try:
-            self.cursor.execute('UPDATE OR IGNORE INTO users (tg_id, stud_group) VALUES (?, ?)', (tg_id, st_group,))
+            self.cursor.execute('INSERT OR REPLACE INTO users (tg_id, stud_group) values (?, ?)', (tg_id, st_group,))
             self.conn.commit()
         except sqlite3.OperationalError as op_error:
             raise SystemError(f'Database Error: {op_error}') from op_error

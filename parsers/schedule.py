@@ -374,7 +374,7 @@ class StudentScheduleParser:
 
         group_abb = group_abb.group()[:-1]
 
-        ed_level = bool(re.search(r'[бсма][-\d]', group_name))
+        ed_level = bool(re.search(r'[а-я]{1}[бсма][-\d]', group_name))
         if not ed_level:
             group_abb = group_abb + default_ed_level
 

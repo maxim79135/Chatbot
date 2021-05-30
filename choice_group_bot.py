@@ -6,15 +6,21 @@
 import logging
 from abc import ABC
 
-from telegram import Update
-from telegram.ext import (CallbackContext, CommandHandler, ConversationHandler,
-                          Filters, MessageHandler, Updater)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import (CallbackContext, CallbackQueryHandler,
+                          CommandHandler, ConversationHandler, Filters,
+                          MessageHandler, Updater)
+
+from parsers.schedule import StudentScheduleParser
+from utils import DBManager
 
 # Enable logging
 logging.basicConfig(
     #  filename='bot.log', filemode='w',
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
+
+DB_NAME = 'bot.db'
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +34,7 @@ group_list = [
 ]
 
 
-class CommonConversation(ABC):
+class CommonConversation(ABC):  # pylint: disable=[too-few-public-methods]
     """Common comversation class"""
 
     no_patterns = [
@@ -60,81 +66,109 @@ class CommonConversation(ABC):
 class ChoiceGroupConversation(CommonConversation):
     """Contain choice group conversation functions"""
 
-    CHOICE_GROUP, CONFIRM_GROUP, TRY_AGAIN = range(3)
-    #  def __init__(self):
-    #  self.CHOICE_GROUP, self.CONFIRM_GROUP, self.TRY_AGAIN = range(3)
+    (
+        ST_CHOICE_GROUP,
+        ST_CONFIRM_GROUP,
+        ST_TRY_AGAIN
+    ) = map(chr, range(3))
+    ST_END = ConversationHandler.END
 
-    def try_again(self, update: Update, _: CallbackContext) -> int:
-        answer = update.message.text
-        if answer in self.yes_patterns:
-            #  update.message.reply_text('')
-            return self.CHOICE_GROUP
-        update.message.reply_text('Окей, давай в другой раз')
-        return ConversationHandler.END
-
-    def confirm_group(self, update: Update, context: CallbackContext) -> int:
-        answer = update.message.text
-        if answer in self.yes_patterns:
-            update.message.reply_text('Понял, принял')
-            # save user group
-            print(context.user_data['choice'])
-            return ConversationHandler.END
-        if answer in self.no_patterns:
-            update.message.reply_text('Значит мы немного не поняли друг друга\nПопробуешь еще раз?')
-            return self.TRY_AGAIN
-
-        update.message.reply_text('А можно по конкретнее: да или нет?')
-        return self.CONFIRM_GROUP
-
-    def choice_group(self, update: Update, context: CallbackContext) -> int:
-        text = update.message.text
-        context.user_data['choice'] = text
-        #  context.user_data['attempt_num'] =
-        if text in group_list:  # TODO: add group_list
-            update.message.reply_text(f'Твоя группа {text}?')
-            return self.CONFIRM_GROUP
-        update.message.reply_text('Похоже такой группы нет, попробуй еще раз')
-        return self.CHOICE_GROUP
+    (
+        CP_CONFIRM_GROUP_YES,
+        CP_CONFIRM_GROUP_NO,
+        CP_TRY_AGAIN_YES,
+        CP_TRY_AGAIN_NO
+    ) = map(chr, range(3, 7))
 
     def choice_group_entry(self, update: Update, _: CallbackContext) -> int:
         update.message.reply_text('Какая у тебя группа?')
-        return self.CHOICE_GROUP
+        return self.ST_CHOICE_GROUP
 
-    def fallback(self, update: Update, context: CallbackContext) -> int:
-        update.message.reply_text('done')
+    def choice_group(self, update: Update, context: CallbackContext) -> int:
+        group_name = ssp.proceed_group_name(update.message.text)
+        logger.info(f'user input: {update.message.text}, finded group: {group_name}')
+        if group_name:
+            context.user_data['group_name'] = group_name
+            buttons = [
+                [
+                    InlineKeyboardButton(text='Да', callback_data=str(self.CP_CONFIRM_GROUP_YES)),
+                    InlineKeyboardButton(text='Нет', callback_data=str(self.CP_CONFIRM_GROUP_NO)),
+                ]
+            ]
+            keyboard = InlineKeyboardMarkup(buttons)
+            update.message.reply_text(f'Твоя группа {group_name}?',
+                                      reply_markup=keyboard)
+            return self.ST_CONFIRM_GROUP
+
+        buttons = [
+            [
+                InlineKeyboardButton(text='Да', callback_data=str(self.CP_TRY_AGAIN_YES)),
+                InlineKeyboardButton(text='Нет', callback_data=str(self.CP_TRY_AGAIN_NO)),
+            ]
+        ]
+        keyboard = InlineKeyboardMarkup(buttons)
+        update.message.reply_text('Похоже такой группы нет, повторить попытку?',
+                                  reply_markup=keyboard)
+        return self.ST_TRY_AGAIN
+
+    def save_group(self, update: Update, context: CallbackContext) -> int:
+        user_tg_id = update.callback_query.from_user.id
+        logger.info(f'update user with id {user_tg_id} group to {context.user_data["group_name"]}')
+        db_manager.update_user(user_tg_id, context.user_data['group_name'])
+        update.callback_query.edit_message_text(f'Запомнил, {context.user_data["group_name"]}')
+        return self.ST_END
+
+    def try_again_entry(self, update: Update, _: CallbackContext) -> int:
+        buttons = [
+            [
+                InlineKeyboardButton(text='Да', callback_data=str(self.CP_TRY_AGAIN_YES)),
+                InlineKeyboardButton(text='Нет', callback_data=str(self.CP_TRY_AGAIN_NO)),
+            ]
+        ]
+        keyboard = InlineKeyboardMarkup(buttons)
+        update.callback_query.edit_message_text('Повторить попытку?',
+                                                reply_markup=keyboard)
+        return self.ST_TRY_AGAIN
+
+    def try_again(self, update: Update, _: CallbackContext) -> int:
+        update.callback_query.edit_message_text('Напиши свою группу')
+        return self.ST_CHOICE_GROUP
+
+    def cancel(self, update: Update, context: CallbackContext) -> int:
+        if update.callback_query:
+            send_message = update.callback_query.edit_message_text
+        else:
+            send_message = update.message.reply_text
+        send_message('Отменено')
         context.user_data.clear()
-        return ConversationHandler.END
-
-def main() -> None:
-    updater = Updater("1147885266:AAFNCRzr3aDZacN5CQ55EHNx7pK35RKdejw")
-
-    dispatcher = updater.dispatcher
-
-    cgc = ChoiceGroupConversation()
-    choice_group_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('choice_group', cgc.choice_group_entry)],
-        states={
-            cgc.CHOICE_GROUP: [
-                MessageHandler(Filters.text, cgc.choice_group),
-            ],
-            cgc.CONFIRM_GROUP: [
-                MessageHandler(
-                    Filters.text & ~(Filters.command | Filters.regex('^Done$')), cgc.confirm_group
-                )
-            ],
-            cgc.TRY_AGAIN: [
-                MessageHandler(
-                    Filters.text & ~(Filters.command | Filters.regex('^Done$')), cgc.try_again,
-                )
-            ],
-        },
-        fallbacks=[MessageHandler(Filters.regex('^Done$'), cgc.fallback)],
-    )
-    dispatcher.add_handler(choice_group_conv_handler)
-
-    updater.start_polling()
-    updater.idle()
+        return self.ST_END
 
 
-if __name__ == '__main__':
-    main()
+ssp = StudentScheduleParser()
+db_manager = DBManager(DB_NAME)
+updater = Updater("1147885266:AAFNCRzr3aDZacN5CQ55EHNx7pK35RKdejw")
+
+dispatcher = updater.dispatcher
+
+cgc = ChoiceGroupConversation()
+choice_group_conv_handler = ConversationHandler(
+    entry_points=[CommandHandler('choice_group', cgc.choice_group_entry)],
+    states={
+        cgc.ST_CHOICE_GROUP: [
+            MessageHandler(Filters.text, cgc.choice_group),
+        ],
+        cgc.ST_CONFIRM_GROUP: [
+            CallbackQueryHandler(cgc.save_group, pattern='^' + str(cgc.CP_CONFIRM_GROUP_YES) + '$'),
+            CallbackQueryHandler(cgc.try_again_entry, pattern='^' + str(cgc.CP_CONFIRM_GROUP_NO) + '$'),
+        ],
+        cgc.ST_TRY_AGAIN: [
+            CallbackQueryHandler(cgc.try_again, pattern='^' + str(cgc.CP_TRY_AGAIN_YES) + '$'),
+            CallbackQueryHandler(cgc.cancel, pattern='^' + str(cgc.CP_TRY_AGAIN_NO) + '$'),
+        ],
+    },
+    fallbacks=[MessageHandler(Filters.text, cgc.cancel)],
+)
+dispatcher.add_handler(choice_group_conv_handler)
+
+updater.start_polling()
+updater.idle()
