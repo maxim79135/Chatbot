@@ -87,6 +87,10 @@ class TeacherScheduleConversation(CommonConversation):
         CP_TRY_AGAIN_NO,
     ) = map(chr, range(6, 14))
 
+    def sch_teacher_entry(self, update: Update, _: CallbackContext) -> int:
+        update.message.reply_text('Напиши ФИО преподавателя в порядке Фамилия Имя Отчество')
+        return self.ST_CHOICE_TEACHER
+
     def choice_teacher(self, update: Update, context: CallbackContext) -> int:
         full_name = update.message.text
         teacher_list = tsp.find_teacher(full_name)
@@ -202,10 +206,6 @@ class TeacherScheduleConversation(CommonConversation):
         update.callback_query.edit_message_text('Напиши ФИО преподавателя в порядке Фамилия Имя Отчество')
         return self.ST_CHOICE_TEACHER
 
-    def sch_teacher_entry(self, update: Update, _: CallbackContext) -> int:
-        update.message.reply_text('Напиши ФИО преподавателя в порядке Фамилия Имя Отчество')
-        return self.ST_CHOICE_TEACHER
-
     def choice_teacher_from_list(self, update: Update, context: CallbackContext) -> int:
         teacher_index = int(update.callback_query.data)
         logger.info('teacher index: %s', teacher_index)
@@ -220,7 +220,7 @@ class TeacherScheduleConversation(CommonConversation):
         return self.ST_END
 
     def fallback(self, update: Update, context: CallbackContext) -> int:
-        update.message.reply_text('done')
+        update.message.reply_text('Отменено')
         context.user_data.clear()
         return self.ST_END
 
