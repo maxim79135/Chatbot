@@ -71,6 +71,18 @@ class DBManager:
         finally:
             self.conn.close()
 
+    def get_user_group(self, tg_id: int) -> str:
+        self.conn = sqlite3.connect(self.db_name)
+        self.cursor = self.conn.cursor()
+        try:
+            self.cursor.execute('SELECT stud_group from users WHERE tg_id=(?)', (tg_id,))
+            res = self.cursor.fetchone()
+        except sqlite3.OperationalError as op_error:
+            raise SystemError(f'Database Error: {op_error}') from op_error
+        finally:
+            self.conn.close()
+        return res[0] if res else ''
+
     def get_user_feedbacks(self, tg_id: int) -> List[Any]:
         self.conn = sqlite3.connect(self.db_name)
         self.cursor = self.conn.cursor()
