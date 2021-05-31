@@ -346,6 +346,30 @@ class StudentScheduleConversation(BaseConversation):
                                       (например 30.09.21), или напиши /cancel для отмены.')
             return self.ST_INPUT_DATE
 
+    def send_sch_link(self, update: Update, _: CallbackContext) -> int:
+        user_tg_id = update.message.from_user.id
+        group_name = db_manager.get_user_group(user_tg_id)
+        if update.callback_query:
+            send_message = update.callback_query.edit_message_text
+        else:
+            send_message = update.message.reply_text
+        if group_name:
+            try:
+                sch = ssp.get_link(group_name)
+                if sch:
+                    send_message(sch)
+                else:
+                    send_message('Похоже на сайте нет расписания на текущую неделю')
+
+            except ValueError:
+                send_message('Похоже твоей группы уже нет, выбери свою группу /choice_group')
+            return self.ST_END
+        else:
+            send_message('Я не знаю твою группу, подскажешь?')
+            # go to choice_group
+            return self.ST_CHOICE_GROUP
+            #  return self.ST_END
+
     def send_sch(self, update: Update, context: CallbackContext) -> int:
         user_tg_id = update.message.from_user.id
         group_name = db_manager.get_user_group(user_tg_id)
@@ -473,6 +497,7 @@ sch_student_conversation_handler = ConversationHandler(
         CommandHandler('sch_today', ssc.sch_today),
         CommandHandler('sch_tomorrow', ssc.sch_tomorrow),
         CommandHandler('sch_date', ssc.sch_date),
+        CommandHandler('sch_link', ssc.send_sch_link),
     ],
     states={
         ssc.ST_INPUT_DATE: [
