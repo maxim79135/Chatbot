@@ -1,4 +1,5 @@
 *.log
 *.pot
 *.pyc
+*.png
 __pycache__/
