@@ -5,15 +5,17 @@
 
 import logging
 from datetime import datetime, timedelta
+from functools import reduce
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardRemove
+from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
+                      ReplyKeyboardMarkup, Update)
 from telegram.ext import (CallbackContext, CallbackQueryHandler,
                           CommandHandler, ConversationHandler, Filters,
                           MessageHandler, Updater)
 
 from parsers.schedule import StudentScheduleParser, TeacherScheduleParser
-from utils import DBManager
 from sentiment.core import get_sent
+from utils import DBManager
 
 # Enable logging
 logging.basicConfig(
@@ -26,16 +28,32 @@ logger = logging.getLogger(__name__)
 TOKEN = '1147885266:AAFNCRzr3aDZacN5CQ55EHNx7pK35RKdejw'
 DB_NAME = 'bot.db'
 
+# buttons order same as available bot commands
+BOT_KEYBOARD = [
+    ['Расписание сегодня', 'Расписание завтра'],
+    ['Расписание на конкретную дату', 'Ссылка на расписание'],
+    ['Расписание преподавателя'],
+    ['Показать мою группу', 'Изменить группу'],
+    ['Помощь', 'Оставить обратную связь']
+]
+
 # func has same names: /start -> bot_start()
-available_bot_commands = [
+BOT_COMMANDS = [
     '/start',
-    '/sch',
+    '/sch_today',
     '/sch_tomorrow',
+    '/sch_date',
+    '/sch_link',
     '/sch_teacher',
+    '/get_group',
+    '/choice_group',
+    '/help',
     #  '/sch_auto',
     '/feedback',
-    '/choice_group',
 ]
+
+_keyboard_func_list = reduce(lambda x, y: x+y, BOT_KEYBOARD)
+BOT_COMMANDS_DICT = dict(zip(_keyboard_func_list, BOT_COMMANDS[1:]))
 # ============= End Settings ==============
 
 
@@ -302,8 +320,8 @@ class FeedbackConversation(BaseConversation):
     ) = map(chr, range(1))
 
     def feedback_entry(self, update: Update, _: CallbackContext) -> int:
-        update.message.reply_text('Напиши то что думаешь',
-                                  reply_markup=ReplyKeyboardRemove())
+        update.message.reply_text('Напиши то что думаешь')
+        #  reply_markup=ReplyKeyboardRemove())
         return self.ST_RECIVE_FEEDBACK
 
     def save_feedback(self, update: Update, _: CallbackContext) -> int:
@@ -397,7 +415,8 @@ class StudentScheduleConversation(BaseConversation):
 def bot_start(update: Update, _: CallbackContext):
     if db_manager.user_exist(update.message.from_user.id):
         update.message.reply_text('Я тебя помню, но если ты просто хочешь\
-                                  изменить свою группу скажи прямо.')
+                                  изменить свою группу скажи прямо.',
+                                  reply_markup=ReplyKeyboardMarkup(BOT_KEYBOARD))
     else:
         db_manager.insert_user(update.message.from_user.id)
         update.message.reply_text('Привет, я чат-бот ВятГУ. Умею показывать расписание,\
