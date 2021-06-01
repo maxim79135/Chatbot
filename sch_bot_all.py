@@ -45,6 +45,13 @@ class BaseConversation():
     ST_END = ConversationHandler.END
     ST_STOP = 'stop'
 
+    @staticmethod
+    def redirect(from_func: callable, to_func: callable) -> callable:
+        def func(update: Update, context: CallbackContext) -> int:
+            from_func(update, context)
+            return to_func(update, context)
+        return func
+
     def cancel(self, update: Update, context: CallbackContext) -> int:
         if update.callback_query:
             send_message = update.callback_query.edit_message_text
@@ -56,7 +63,6 @@ class BaseConversation():
 
     def fallback(self, _: Update, context: CallbackContext) -> int:
         logger.info('%s fallback called', type(self))
-        #  update.message.reply_text('Отменено')
         context.user_data.clear()
         return self.ST_END
 
@@ -238,7 +244,8 @@ class TeacherScheduleConversation(BaseConversation):
                 send_message('\n'.join(sch))
             else:
                 #  update.callback_query.answer()
-                send_message(f'{context.user_data["date"].strftime("%d.%m.%y")} у {context.user_data["teacher"]["name"]} нет занятий')
+                send_message(f'{context.user_data["date"].strftime("%d.%m.%y")} у '
+                             f'{context.user_data["teacher"]["name"]} нет занятий')
         except ValueError:
             send_message('Похоже на сайте ВятГУ не нашлось расписания для данного преподавателя')
         return self.ST_END
@@ -324,13 +331,11 @@ class StudentScheduleConversation(BaseConversation):
 
     def sch_today(self, update: Update, context: CallbackContext) -> int:
         context.user_data['date'] = datetime.today()
-        return self.ST_SEND_SCH
-    #  return self.send_sch(update, context)
+        return self.send_sch(update, context)
 
     def sch_tomorrow(self, update: Update, context: CallbackContext) -> int:
         context.user_data['date'] = datetime.today() + timedelta(days=1)
-        return self.ST_SEND_SCH
-    #  return self.send_sch(update, context)
+        return self.send_sch(update, context)
 
     def sch_date(self, update: Update, _: CallbackContext) -> int:
         update.message.reply_text('Напиши дату в формате ДД.ММ.ГГ (например 23.03.21),\
@@ -344,20 +349,21 @@ class StudentScheduleConversation(BaseConversation):
             date = datetime.strptime(update.message.text, '%d.%m.%y')
             logger.info('recive date %s', date.strftime("%d.%m.%y"))
             context.user_data['date'] = date
-            return self.ST_SEND_SCH
-        #  return self.send_sch(update, context)
+            return self.send_sch(update, context)
         except ValueError:
             update.message.reply_text('Не понимаю тебя, попробуй еще раз. Напоминаю формат даты ДД.ММ.ГГ\
                                       (например 30.09.21), или напиши /cancel для отмены.')
             return self.ST_INPUT_DATE
 
     def send_sch_link(self, update: Update, _: CallbackContext) -> int:
-        user_tg_id = update.message.from_user.id
-        group_name = db_manager.get_user_group(user_tg_id)
         if update.callback_query:
+            user_tg_id = update.callback_query.from_user.id
             send_message = update.callback_query.edit_message_text
         else:
+            user_tg_id = update.message.from_user.id
             send_message = update.message.reply_text
+
+        group_name = db_manager.get_user_group(user_tg_id)
         if group_name:
             try:
                 sch = ssp.get_link(group_name)
@@ -369,19 +375,19 @@ class StudentScheduleConversation(BaseConversation):
             except ValueError:
                 send_message('Похоже твоей группы уже нет, выбери свою группу /choice_group')
             return self.ST_END
-        else:
-            send_message('Я не знаю твою группу, подскажешь?')
-            # go to choice_group
-            return self.ST_CHOICE_GROUP
-        #  return self.ST_END
+
+        send_message('Я не знаю твою группу, подскажешь?')
+        return self.ST_CHOICE_GROUP
 
     def send_sch(self, update: Update, context: CallbackContext) -> int:
-        user_tg_id = update.message.from_user.id
-        group_name = db_manager.get_user_group(user_tg_id)
         if update.callback_query:
+            user_tg_id = update.callback_query.from_user.id
             send_message = update.callback_query.edit_message_text
         else:
+            user_tg_id = update.message.from_user.id
             send_message = update.message.reply_text
+
+        group_name = db_manager.get_user_group(user_tg_id)
         if group_name:
             try:
                 sch = ssp.get_schedule(group_name, context.user_data['date'])
@@ -396,11 +402,9 @@ class StudentScheduleConversation(BaseConversation):
             except ValueError:
                 send_message('Похоже твоей группы уже нет, выбери свою группу /choice_group')
             return self.ST_END
-        else:
-            send_message('Я не знаю твою группу, подскажешь?')
-            # go to choice_group
-            return self.ST_CHOICE_GROUP
-        #  return self.ST_END
+
+        send_message('Я не знаю твою группу, подскажешь?')
+        return self.ST_CHOICE_GROUP
 
 
 def bot_start(update: Update, _: CallbackContext):
@@ -437,24 +441,6 @@ cgc = ChoiceGroupConversation()
 tsc = TeacherScheduleConversation()
 fc = FeedbackConversation()
 
-ssc_choice_group_conv_handler = ConversationHandler(
-    entry_points=[MessageHandler(Filters.text, cgc.choice_group)],
-    states={
-        cgc.ST_CONFIRM_GROUP: [
-            CallbackQueryHandler(cgc.save_group, pattern='^' + str(cgc.CP_CONFIRM_GROUP_YES) + '$'),
-            CallbackQueryHandler(cgc.try_again_entry, pattern='^' + str(cgc.CP_CONFIRM_GROUP_NO) + '$'),
-        ],
-        cgc.ST_TRY_AGAIN: [
-            CallbackQueryHandler(cgc.try_again, pattern='^' + str(cgc.CP_TRY_AGAIN_YES) + '$'),
-            CallbackQueryHandler(cgc.cancel, pattern='^' + str(cgc.CP_TRY_AGAIN_NO) + '$'),
-        ],
-    },
-    fallbacks=[MessageHandler(Filters.text, cgc.cancel)],
-    map_to_parent={
-        cgc.ST_END: ssc.ST_SEND_SCH,
-        cgc.ST_STOP: ssc.ST_END,
-    }
-)
 
 sch_student_conv_handler = ConversationHandler(
     entry_points=[
@@ -465,8 +451,16 @@ sch_student_conv_handler = ConversationHandler(
     ],
     states={
         ssc.ST_INPUT_DATE: [MessageHandler(Filters.text, ssc.input_date)],
-        ssc.ST_CHOICE_GROUP: [ssc_choice_group_conv_handler],
-        ssc.ST_SEND_SCH: [MessageHandler(Filters.text, ssc.send_sch)]
+        ssc.ST_CHOICE_GROUP: [MessageHandler(Filters.text, cgc.choice_group)],
+        cgc.ST_CONFIRM_GROUP: [
+            CallbackQueryHandler(BaseConversation.redirect(cgc.save_group, ssc.send_sch),
+                                 pattern='^' + str(cgc.CP_CONFIRM_GROUP_YES) + '$'),
+            CallbackQueryHandler(cgc.try_again_entry, pattern='^' + str(cgc.CP_CONFIRM_GROUP_NO) + '$'),
+        ],
+        cgc.ST_TRY_AGAIN: [
+            CallbackQueryHandler(cgc.try_again, pattern='^' + str(cgc.CP_TRY_AGAIN_YES) + '$'),
+            CallbackQueryHandler(cgc.cancel, pattern='^' + str(cgc.CP_TRY_AGAIN_NO) + '$'),
+        ],
     },
     fallbacks=[MessageHandler(Filters.text, ssc.fallback)],
 )
@@ -475,9 +469,7 @@ sch_student_conv_handler = ConversationHandler(
 choice_group_conv_handler = ConversationHandler(
     entry_points=[CommandHandler('choice_group', cgc.choice_group_entry)],
     states={
-        cgc.ST_CHOICE_GROUP: [
-            MessageHandler(Filters.text, cgc.choice_group),
-        ],
+        cgc.ST_CHOICE_GROUP: [MessageHandler(Filters.text, cgc.choice_group)],
         cgc.ST_CONFIRM_GROUP: [
             CallbackQueryHandler(cgc.save_group, pattern='^' + str(cgc.CP_CONFIRM_GROUP_YES) + '$'),
             CallbackQueryHandler(cgc.try_again_entry, pattern='^' + str(cgc.CP_CONFIRM_GROUP_NO) + '$'),
