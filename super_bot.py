@@ -414,25 +414,62 @@ class StudentScheduleConversation(BaseConversation):
 
 
 ST_CHOICE_GROUP = chr(44)
+ST_GET_GROUP = chr(45)
+ST_FEEDBACK = chr(46)
+ST_SCH_TEACHER = chr(47)
 ST_END = ConversationHandler.END
-#  def bot_start(update: Update, context: CallbackContext):
+
+def bot_start(update: Update, _: CallbackContext):
+    if db_manager.user_exist(update.message.from_user.id):
+        update.message.reply_text('Я тебя помню, но если ты просто хочешь\
+                                  изменить свою группу скажи прямо.',
+                                  reply_markup=ReplyKeyboardMarkup(BOT_KEYBOARD))
+    else:
+        db_manager.insert_user(update.message.from_user.id)
+        update.message.reply_text('Привет, я чат-бот ВятГУ. Умею показывать расписание,\
+                                  отвечать на часто задаваемые вопросы, \
+                                  а также сохранять обратную связь.\
+                                  \nНапиши свой вопрос или воспользуйся кнопками на клавиатуре')
 #  def bot_sch_today(update: Update, context: CallbackContext):
 #  def bot_sch_tomorrow(update: Update, context: CallbackContext):
 #  def bot_sch_date(update: Update, context: CallbackContext):
 #  def bot_sch_link(update: Update, context: CallbackContext):
-#  def bot_sch_teacher(update: Update, context: CallbackContext):
-#  def bot_get_group(update: Update, context: CallbackContext):
-def bot_choice_group(update: Update, context: CallbackContext):
+
+def bot_sch_teacher(update: Update, _: CallbackContext):
+    update.message.reply_text('Напиши ФИО преподавателя в порядке Фамилия Имя Отчество')
+    return ST_SCH_TEACHER
+
+def bot_choice_group(update: Update, _: CallbackContext):
     update.message.reply_text('Какая у тебя группа?')
     return ST_CHOICE_GROUP
-#  def bot_help(update: Update, context: CallbackContext):
-#  def bot_feedback(update: Update, context: CallbackContext):
 
+def bot_help(update: Update, context: CallbackContext):
+    update.message.reply_text('это хепл,надо красиво оформить')
+    return ST_END
+
+def bot_feedback(update: Update, _: CallbackContext):
+    update.message.reply_text('Напиши то что думаешь')
+    #  reply_markup=ReplyKeyboardRemove())
+    return ST_FEEDBACK
+
+def bot_get_group(update: Update, _: CallbackContext):
+    user_tg_id = update.message.from_user.id
+    group_name = db_manager.get_user_group(user_tg_id)
+    if group_name:
+        update.message.reply_text(f'Твоя группа: {group_name}')
+    else:
+        update.message.reply_text('Похоже у тебя еще не выбрана группа')
+
+def bot_stop(update: Update, _: CallbackContext):
+    update.message.reply_text('bot stop called')
+    return ST_END
 
 def make_desicion(update: Update, context: CallbackContext):
     message = update.message.text
     command = BOT_COMMANDS_DICT.get(message)
-    if command == '/choice_group':
+    if message in BOT_COMMANDS:
+        return globals()['bot_'+message[1:]](update, context)
+    if command in BOT_COMMANDS:
         return globals()['bot_'+command[1:]](update, context)
         #  try:
             #  return locals()['bot_'+command[1:]](update, context)
@@ -467,31 +504,6 @@ def make_desicion(update: Update, context: CallbackContext):
         #        update.message.reply_text('Спасибо за обратную связь.')
         #    return END
 
-def bot_start(update: Update, _: CallbackContext):
-    if db_manager.user_exist(update.message.from_user.id):
-        update.message.reply_text('Я тебя помню, но если ты просто хочешь\
-                                  изменить свою группу скажи прямо.',
-                                  reply_markup=ReplyKeyboardMarkup(BOT_KEYBOARD))
-    else:
-        db_manager.insert_user(update.message.from_user.id)
-        update.message.reply_text('Привет, я чат-бот ВятГУ. Умею показывать расписание,\
-                                  отвечать на часто задаваемые вопросы, \
-                                  а также сохранять обратную связь.\
-                                  \nНапиши свой вопрос или воспользуйся кнопками на клавиатуре')
-
-def bot_get_group(update: Update, _: CallbackContext):
-    user_tg_id = update.message.from_user.id
-    group_name = db_manager.get_user_group(user_tg_id)
-    if group_name:
-        update.message.reply_text(f'Твоя группа: {group_name}')
-    else:
-        update.message.reply_text('Похоже у тебя еще не выбрана группа')
-        # when top level conversation, redirect to 'choice group?' -> top_level_conversation.ST_CHOICE_GROUP
-        #  choice group?
-
-def bot_stop(update: Update, _: CallbackContext):
-        update.message.reply_text('bot stop called')
-        return ST_END
 
 ssp = StudentScheduleParser()
 tsp = TeacherScheduleParser()
@@ -530,8 +542,44 @@ sch_student_conv_handler = ConversationHandler(
 )
 
 
+feedback_conv_handler = ConversationHandler(
+    entry_points=[MessageHandler(Filters.text, fc.save_feedback)],
+    states={
+        fc.ST_RECIVE_FEEDBACK: [
+            MessageHandler(Filters.text, fc.save_feedback),
+        ]
+    },
+    fallbacks=[MessageHandler(Filters.text, fc.fallback)],
+    map_to_parent={
+        fc.ST_END: ST_END,
+    }
+)
+
+
+choice_group_conv_handler = ConversationHandler(
+    #  entry_points=[CommandHandler('choice_group', cgc.choice_group_entry)],
+    entry_points=[MessageHandler(Filters.text, cgc.choice_group)],
+    states={
+        ssc.ST_CHOICE_GROUP: [MessageHandler(Filters.text, cgc.choice_group)],
+        cgc.ST_CONFIRM_GROUP: [
+            CallbackQueryHandler(cgc.save_group, pattern='^' + str(cgc.CP_CONFIRM_GROUP_YES) + '$'),
+            CallbackQueryHandler(cgc.try_again_entry, pattern='^' + str(cgc.CP_CONFIRM_GROUP_NO) + '$'),
+        ],
+        cgc.ST_TRY_AGAIN: [
+            CallbackQueryHandler(cgc.try_again, pattern='^' + str(cgc.CP_TRY_AGAIN_YES) + '$'),
+            CallbackQueryHandler(cgc.cancel, pattern='^' + str(cgc.CP_TRY_AGAIN_NO) + '$'),
+        ],
+    },
+    fallbacks=[MessageHandler(Filters.text, cgc.cancel)],
+    map_to_parent={
+        cgc.ST_END: ST_END,
+    }
+)
+
+
 sch_teacher_conv_handler = ConversationHandler(
-    entry_points=[CommandHandler('sch_teacher', tsc.sch_teacher_entry)],
+    #  entry_points=[CommandHandler('sch_teacher', tsc.sch_teacher_entry)],
+    entry_points=[MessageHandler(Filters.text, tsc.choice_teacher)],
     states={
         tsc.ST_CHOICE_TEACHER: [
             MessageHandler(Filters.text, tsc.choice_teacher),
@@ -558,39 +606,6 @@ sch_teacher_conv_handler = ConversationHandler(
         ],
     },
     fallbacks=[MessageHandler(Filters.text, tsc.fallback)],
-)
-
-
-feedback_conv_handler = ConversationHandler(
-    entry_points=[CommandHandler('feedback', fc.feedback_entry)],
-    states={
-        fc.ST_RECIVE_FEEDBACK: [
-            MessageHandler(Filters.text, fc.save_feedback),
-        ]
-    },
-    fallbacks=[MessageHandler(Filters.text, fc.fallback)],
-)
-
-
-start_handler = CommandHandler('start', bot_start)
-get_group_handler = CommandHandler('get_group', bot_get_group)
-
-
-choice_group_conv_handler = ConversationHandler(
-    #  entry_points=[CommandHandler('choice_group', cgc.choice_group_entry)],
-    entry_points=[MessageHandler(Filters.text, cgc.choice_group)],
-    states={
-        ssc.ST_CHOICE_GROUP: [MessageHandler(Filters.text, cgc.choice_group)],
-        cgc.ST_CONFIRM_GROUP: [
-            CallbackQueryHandler(cgc.save_group, pattern='^' + str(cgc.CP_CONFIRM_GROUP_YES) + '$'),
-            CallbackQueryHandler(cgc.try_again_entry, pattern='^' + str(cgc.CP_CONFIRM_GROUP_NO) + '$'),
-        ],
-        cgc.ST_TRY_AGAIN: [
-            CallbackQueryHandler(cgc.try_again, pattern='^' + str(cgc.CP_TRY_AGAIN_YES) + '$'),
-            CallbackQueryHandler(cgc.cancel, pattern='^' + str(cgc.CP_TRY_AGAIN_NO) + '$'),
-        ],
-    },
-    fallbacks=[MessageHandler(Filters.text, cgc.cancel)],
     map_to_parent={
         cgc.ST_END: ST_END,
     }
@@ -605,11 +620,11 @@ conv_handler = ConversationHandler(
         #  SCH_TOMORROW: [choice_group_conv_handler],
         #  SCH_DATE: [choice_group_conv_handler],
         #  SCH_LINK: [choice_group_conv_handler],
-        #  SCH_TEACHER: [choice_group_conv_handler],
-        #  GET_GROUP: [choice_group_conv_handler],
+        ST_SCH_TEACHER: [sch_teacher_conv_handler],
+        ST_GET_GROUP: [choice_group_conv_handler],
         ST_CHOICE_GROUP: [choice_group_conv_handler],
         # HELP no need state
-        #  FEEDBACK: [MessageHandler(Filters.text, bot_feedback)],
+        ST_FEEDBACK: [feedback_conv_handler],
         #  STOP: [CommandHandler('start', start)],
     },
     fallbacks=[MessageHandler(Filters.text, bot_stop)],
