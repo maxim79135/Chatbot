@@ -43,6 +43,7 @@ class BaseConversation():
     """Contain base conversation functions"""
 
     ST_END = ConversationHandler.END
+    ST_STOP = 'stop'
 
     def cancel(self, update: Update, context: CallbackContext) -> int:
         if update.callback_query:
@@ -318,15 +319,18 @@ class StudentScheduleConversation(BaseConversation):
     (
         ST_CHOICE_GROUP,
         ST_INPUT_DATE,
-    ) = map(chr, range(2))
+        ST_SEND_SCH,
+    ) = map(chr, range(3))
 
     def sch_today(self, update: Update, context: CallbackContext) -> int:
         context.user_data['date'] = datetime.today()
-        return self.send_sch(update, context)
+        return self.ST_SEND_SCH
+    #  return self.send_sch(update, context)
 
     def sch_tomorrow(self, update: Update, context: CallbackContext) -> int:
         context.user_data['date'] = datetime.today() + timedelta(days=1)
-        return self.send_sch(update, context)
+        return self.ST_SEND_SCH
+    #  return self.send_sch(update, context)
 
     def sch_date(self, update: Update, _: CallbackContext) -> int:
         update.message.reply_text('Напиши дату в формате ДД.ММ.ГГ (например 23.03.21),\
@@ -340,7 +344,8 @@ class StudentScheduleConversation(BaseConversation):
             date = datetime.strptime(update.message.text, '%d.%m.%y')
             logger.info('recive date %s', date.strftime("%d.%m.%y"))
             context.user_data['date'] = date
-            return self.send_sch(update, context)
+            return self.ST_SEND_SCH
+        #  return self.send_sch(update, context)
         except ValueError:
             update.message.reply_text('Не понимаю тебя, попробуй еще раз. Напоминаю формат даты ДД.ММ.ГГ\
                                       (например 30.09.21), или напиши /cancel для отмены.')
@@ -368,7 +373,7 @@ class StudentScheduleConversation(BaseConversation):
             send_message('Я не знаю твою группу, подскажешь?')
             # go to choice_group
             return self.ST_CHOICE_GROUP
-            #  return self.ST_END
+        #  return self.ST_END
 
     def send_sch(self, update: Update, context: CallbackContext) -> int:
         user_tg_id = update.message.from_user.id
@@ -395,7 +400,7 @@ class StudentScheduleConversation(BaseConversation):
             send_message('Я не знаю твою группу, подскажешь?')
             # go to choice_group
             return self.ST_CHOICE_GROUP
-            #  return self.ST_END
+        #  return self.ST_END
 
 
 def bot_start(update: Update, _: CallbackContext):
@@ -427,7 +432,46 @@ updater = Updater(TOKEN)
 
 dispatcher = updater.dispatcher
 
+ssc = StudentScheduleConversation()
 cgc = ChoiceGroupConversation()
+tsc = TeacherScheduleConversation()
+fc = FeedbackConversation()
+
+ssc_choice_group_conv_handler = ConversationHandler(
+    entry_points=[MessageHandler(Filters.text, cgc.choice_group)],
+    states={
+        cgc.ST_CONFIRM_GROUP: [
+            CallbackQueryHandler(cgc.save_group, pattern='^' + str(cgc.CP_CONFIRM_GROUP_YES) + '$'),
+            CallbackQueryHandler(cgc.try_again_entry, pattern='^' + str(cgc.CP_CONFIRM_GROUP_NO) + '$'),
+        ],
+        cgc.ST_TRY_AGAIN: [
+            CallbackQueryHandler(cgc.try_again, pattern='^' + str(cgc.CP_TRY_AGAIN_YES) + '$'),
+            CallbackQueryHandler(cgc.cancel, pattern='^' + str(cgc.CP_TRY_AGAIN_NO) + '$'),
+        ],
+    },
+    fallbacks=[MessageHandler(Filters.text, cgc.cancel)],
+    map_to_parent={
+        cgc.ST_END: ssc.ST_SEND_SCH,
+        cgc.ST_STOP: ssc.ST_END,
+    }
+)
+
+sch_student_conv_handler = ConversationHandler(
+    entry_points=[
+        CommandHandler('sch_today', ssc.sch_today),
+        CommandHandler('sch_tomorrow', ssc.sch_tomorrow),
+        CommandHandler('sch_date', ssc.sch_date),
+        CommandHandler('sch_link', ssc.send_sch_link),
+    ],
+    states={
+        ssc.ST_INPUT_DATE: [MessageHandler(Filters.text, ssc.input_date)],
+        ssc.ST_CHOICE_GROUP: [ssc_choice_group_conv_handler],
+        ssc.ST_SEND_SCH: [MessageHandler(Filters.text, ssc.send_sch)]
+    },
+    fallbacks=[MessageHandler(Filters.text, ssc.fallback)],
+)
+
+
 choice_group_conv_handler = ConversationHandler(
     entry_points=[CommandHandler('choice_group', cgc.choice_group_entry)],
     states={
@@ -447,8 +491,7 @@ choice_group_conv_handler = ConversationHandler(
 )
 
 
-tsc = TeacherScheduleConversation()
-sch_teacher_conversation_handler = ConversationHandler(
+sch_teacher_conv_handler = ConversationHandler(
     entry_points=[CommandHandler('sch_teacher', tsc.sch_teacher_entry)],
     states={
         tsc.ST_CHOICE_TEACHER: [
@@ -479,8 +522,7 @@ sch_teacher_conversation_handler = ConversationHandler(
 )
 
 
-fc = FeedbackConversation()
-feedback_conversation_handler = ConversationHandler(
+feedback_conv_handler = ConversationHandler(
     entry_points=[CommandHandler('feedback', fc.feedback_entry)],
     states={
         fc.ST_RECIVE_FEEDBACK: [
@@ -491,36 +533,16 @@ feedback_conversation_handler = ConversationHandler(
 )
 
 
-ssc = StudentScheduleConversation()
-sch_student_conversation_handler = ConversationHandler(
-    entry_points=[
-        CommandHandler('sch_today', ssc.sch_today),
-        CommandHandler('sch_tomorrow', ssc.sch_tomorrow),
-        CommandHandler('sch_date', ssc.sch_date),
-        CommandHandler('sch_link', ssc.send_sch_link),
-    ],
-    states={
-        ssc.ST_INPUT_DATE: [
-            MessageHandler(Filters.text, ssc.input_date),
-        ],
-        ssc.ST_CHOICE_GROUP: [
-            MessageHandler(Filters.text, ssc.cancel),
-        ]
-    },
-    fallbacks=[MessageHandler(Filters.text, ssc.fallback)],
-)
-
-
 start_handler = CommandHandler('start', bot_start)
 get_group_handler = CommandHandler('get_group', bot_get_group)
 
 
 dispatcher.add_handler(start_handler)
 dispatcher.add_handler(get_group_handler)
-dispatcher.add_handler(sch_student_conversation_handler)
+dispatcher.add_handler(sch_student_conv_handler)
 dispatcher.add_handler(choice_group_conv_handler)
-dispatcher.add_handler(sch_teacher_conversation_handler)
-dispatcher.add_handler(feedback_conversation_handler)
+dispatcher.add_handler(sch_teacher_conv_handler)
+dispatcher.add_handler(feedback_conv_handler)
 
 updater.start_polling()
 updater.idle()
