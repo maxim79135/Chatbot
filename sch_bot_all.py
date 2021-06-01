@@ -355,29 +355,9 @@ class StudentScheduleConversation(BaseConversation):
                                       (например 30.09.21), или напиши /cancel для отмены.')
             return self.ST_INPUT_DATE
 
-    def send_sch_link(self, update: Update, _: CallbackContext) -> int:
-        if update.callback_query:
-            user_tg_id = update.callback_query.from_user.id
-            send_message = update.callback_query.edit_message_text
-        else:
-            user_tg_id = update.message.from_user.id
-            send_message = update.message.reply_text
-
-        group_name = db_manager.get_user_group(user_tg_id)
-        if group_name:
-            try:
-                sch = ssp.get_link(group_name)
-                if sch:
-                    send_message(sch)
-                else:
-                    send_message('Похоже на сайте нет расписания на текущую неделю')
-
-            except ValueError:
-                send_message('Похоже твоей группы уже нет, выбери свою группу /choice_group')
-            return self.ST_END
-
-        send_message('Я не знаю твою группу, подскажешь?')
-        return self.ST_CHOICE_GROUP
+    def send_sch_link(self, update: Update, context: CallbackContext) -> int:
+        context.user_data['link'] = True
+        return self.send_sch(update, context)
 
     def send_sch(self, update: Update, context: CallbackContext) -> int:
         if update.callback_query:
@@ -390,14 +370,21 @@ class StudentScheduleConversation(BaseConversation):
         group_name = db_manager.get_user_group(user_tg_id)
         if group_name:
             try:
-                sch = ssp.get_schedule(group_name, context.user_data['date'])
-                if sch:
-                    if isinstance(sch, list):  # text schedule
-                        update.message.reply_text('\n'.join(sch))
+                if context.user_data.get('link'):
+                    sch = ssp.get_link(group_name)
+                    if sch:
+                        send_message(sch)
                     else:
-                        context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(sch, 'rb'))
+                        send_message('Похоже на сайте нет расписания на текущую неделю')
                 else:
-                    send_message('В этот день нет занятий')
+                    sch = ssp.get_schedule(group_name, context.user_data['date'])
+                    if sch:
+                        if isinstance(sch, list):  # text schedule
+                            update.message.reply_text('\n'.join(sch))
+                        else:
+                            context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(sch, 'rb'))
+                    else:
+                        send_message('В этот день нет занятий')
 
             except ValueError:
                 send_message('Похоже твоей группы уже нет, выбери свою группу /choice_group')
