@@ -440,20 +440,17 @@ ST_END = ConversationHandler.END
 
 def bot_start(update: Update, _: CallbackContext):
     if db_manager.user_exist(update.message.from_user.id):
-        update.message.reply_text('''Мы уже знакомы, но я напомню. Я чат-бот ВятГУ. Умею показывать расписание,
-                                  отвечать на часто задаваемые вопросы, 
-                                  а также сохранять обратную связь.
-                                  \nНапиши свой вопрос или воспользуйся кнопками на клавиатуре''',
+        update.message.reply_text('Мы уже знакомы, но я напомню. Я чат-бот ВятГУ. Умею показывать расписание,'
+                                  'отвечать на часто задаваемые вопросы,'
+                                  'а также сохранять обратную связь.'
+                                  '\nНапиши свой вопрос или воспользуйся кнопками на клавиатуре',
                                   reply_markup=ReplyKeyboardMarkup(BOT_KEYBOARD))
-        #  update.message.reply_text('Я тебя помню, но если ты просто хочешь\
-                                  #  изменить свою группу скажи прямо.',
-                                  #  reply_markup=ReplyKeyboardMarkup(BOT_KEYBOARD))
     else:
         db_manager.insert_user(update.message.from_user.id)
-        update.message.reply_text('Привет, я чат-бот ВятГУ. Умею показывать расписание,\
-                                  отвечать на часто задаваемые вопросы, \
-                                  а также сохранять обратную связь.\
-                                  \nНапиши свой вопрос или воспользуйся кнопками на клавиатуре',
+        update.message.reply_text('Привет, я чат-бот ВятГУ. Умею показывать расписание,'
+                                  'отвечать на часто задаваемые вопросы, '
+                                  'а также сохранять обратную связь.'
+                                  '\nНапиши свой вопрос или воспользуйся кнопками на клавиатуре',
                                   reply_markup=ReplyKeyboardMarkup(BOT_KEYBOARD))
 
 # for student schedule use dump code, don't blame me. I am dump too
@@ -478,7 +475,12 @@ def bot_choice_group(update: Update, _: CallbackContext):
     return ST_CHOICE_GROUP
 
 def bot_help(update: Update, _: CallbackContext):
-    update.message.reply_text('это хепл,надо красиво оформить')
+    command_list = '\n'.join([f'{val} - {key}' for key, val in
+                              zip(BOT_COMMANDS_DICT.keys(), BOT_COMMANDS_DICT.values())])
+
+    update.message.reply_text('Чтобы получить ответ на свой вопрос просто напиши его.'
+                              ' Также можешь воспользоваться кнопками на клавиатуре.\n'
+                              'Или отправить одну из следующих команд:\n' + command_list)
     return ST_END
 
 def bot_feedback(update: Update, _: CallbackContext):
