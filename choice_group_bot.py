@@ -6,13 +6,15 @@
 import logging
 from abc import ABC
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
+                      ReplyKeyboardMarkup, ReplyKeyboardRemove, Update)
 from telegram.ext import (CallbackContext, CallbackQueryHandler,
                           CommandHandler, ConversationHandler, Filters,
                           MessageHandler, Updater)
 
 from parsers.schedule import StudentScheduleParser
 from utils import DBManager
+from functools import reduce
 
 # Enable logging
 logging.basicConfig(
@@ -33,37 +35,7 @@ group_list = [
     'gr5'
 ]
 
-
-class CommonConversation(ABC):  # pylint: disable=[too-few-public-methods]
-    """Common comversation class"""
-
-    no_patterns = [
-        'нет',
-        'ytn',
-        'yt',
-        'неа',
-        'не',
-        #  'не{0,30}',  TODO: add regex
-        'н',
-        'не хочу',
-        'no',
-        'nope',
-    ]
-
-    yes_patterns = [
-        'д',
-        'да',
-        'lf',
-        #  'да{0,30}', TODO: add regex
-        'ага',
-        'угу',
-        'хочу',
-        'yes',
-        'yeap',
-        'yeap',
-    ]
-
-class ChoiceGroupConversation(CommonConversation):
+class ChoiceGroupConversation():
     """Contain choice group conversation functions"""
 
     (
@@ -81,7 +53,31 @@ class ChoiceGroupConversation(CommonConversation):
     ) = map(chr, range(3, 7))
 
     def choice_group_entry(self, update: Update, _: CallbackContext) -> int:
-        update.message.reply_text('Какая у тебя группа?')
+        keyboard = [
+            ['Расписание сегодня', 'Расписание завтра'],
+            ['Расписание на конкретную дату', 'Ссылка на расписание'],
+            ['Расписание преподавателя'],
+            ['Показать мою группу', 'Изменить группу'],
+            ['Помощь', 'Оставить обратную связь']
+        ]
+        available_bot_commands = [
+            '/start',
+            '/sch_today',
+            '/sch_tomorrow',
+            '/sch_date',
+            '/sch_link',
+            '/sch_teacher',
+            '/get_group',
+            '/choice_group',
+            '/help',
+            #  '/sch_auto',
+            '/feedback',
+        ]
+        keyboard_func_list = reduce(lambda x, y: x+y, keyboard)
+        bot_commands_dict = dict(zip(keyboard_func_list, available_bot_commands[1:]))
+        print(bot_commands_dict)
+        update.message.reply_text('fga',
+                                  reply_markup=ReplyKeyboardMarkup(keyboard))
         return self.ST_CHOICE_GROUP
 
     def choice_group(self, update: Update, context: CallbackContext) -> int:
