@@ -518,8 +518,8 @@ def make_desicion(update: Update, context: CallbackContext):
     except KeyError:
         return command_not_implemented()
 
-    is_faq, faq_answer = faq_or_feedback(message)  # True - faq; False - feedback
-    if is_faq:
+    desicion, answer = (message)  # -1 - no classified; 0 - faq; 1 - feedback
+    if desicion == FAQ:
         if faq_answer in BOT_COMMANDS:
             try:
                 return globals()['bot_'+command[1:]](update, context)
